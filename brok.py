@@ -51,7 +51,7 @@ class MyClient(discord.Client):
         # await self.tree.sync()
         # self.tree.copy_global_to(guild=MAIN_GUILD)
         # await self.tree.sync(guild=MAIN_GUILD)
-        pass
+        print("setup_hook() done.")
 
     async def generate_message(self, message, systemprompt):            
         print(systemprompt)
@@ -173,7 +173,7 @@ class BrokCommands(Enum):
     sync = 4
 
 @client.tree.command(name='command', description="*Owner only command*", guild=MAIN_GUILD)
-async def command(interaction: discord.Interaction, action: BrokCommands, name: str | None):
+async def command(interaction: discord.Interaction, action: BrokCommands, value: str | None):
     try:
         if interaction.user.id == BOT_OWNER:
             models_list = await openaiapi.models.list()
@@ -184,31 +184,31 @@ async def command(interaction: discord.Interaction, action: BrokCommands, name: 
                         msg += f"``{x.id}``\n"
                     await embed_msg(interaction, msg)
                 case BrokCommands.load:
-                    if name != None:
+                    if value != None:
                         for x in models_list.data:
-                            if x.id == name:
+                            if x.id == value:
                                 await embed_msg(interaction, f"Changing model: ``{x.id}``")
                                 client.model_set = x.id
                     else:
                         await embed_msg(interaction, "``name`` can't be empty for this command.", 0xFF0000)
                 case BrokCommands.unload:
-                    if name != None:
-                        if name == "all":
+                    if value != None:
+                        if value == "all":
                             for x in models_list.data:
                                 unload(x)
                             await embed_msg(interaction, "done.")
                         else:
                             for x in models_list.data:
-                                if x.id == name:
+                                if x.id == value:
                                     unload(x)
                                     await embed_msg(interaction, "done.")
                                     break
-                            await embed_msg(interaction, f"``{name}`` not found.", 0xFF0000)
+                            await embed_msg(interaction, f"``{value}`` not found.", 0xFF0000)
                     else:
-                        await embed_msg(interaction, "``name`` can't be empty for this command.", 0xFF0000)
+                        await embed_msg(interaction, "``value`` can't be empty for this command.", 0xFF0000)
                 case BrokCommands.sync:
-                    await client.tree.sync(guild=name)
-                    await embed_msg(interaction, "done")
+                    await client.tree.sync(guild=discord.Object(id=int(value)) if value != None else None)
+                    await embed_msg(interaction, "done.")
         else:
             await embed_msg(interaction, "Access denied: Not the Owner.", 0xFF0000)
     except Exception as err:
@@ -217,6 +217,7 @@ async def command(interaction: discord.Interaction, action: BrokCommands, name: 
         await embed_msg(interaction, msg, 0xFF0000)
 
 @client.tree.command(name='ask', description="Ask brok a question.")
+@app_commands.allowed_installs(guilds=True, users=True)
 async def command_ask(interaction: discord.Interaction, message: str):
     try:
         listofmessages = [
