@@ -20,11 +20,6 @@ openaiapi = AsyncOpenAI(base_url=openai_host + "/v1", api_key=openai_key)
 
 message_max_size = 2000
 
-def websocket_log(content):
-    payload = {'content': content}
-    
-    r = requests.post(client.webhook, data=payload)
-
 def unload(model):
     if model.status["value"] == "loaded":
         data = {
@@ -37,9 +32,9 @@ def unload(model):
         r = requests.post(openai_host + "/models/unload", data=data, json=json)
         # websocket_log("``" + r.text + "``")
         r.raise_for_status()
-        websocket_log("unloaded: ``" + model.id + "``")
+        return "unloaded: ``" + model.id + "``"
     else:
-        websocket_log("Model is not running: ``" + model.id + "``")
+        return "Model is not running: ``" + model.id + "``"
 
 class MyClient(discord.Client):
     def __init__(self, *, intents: discord.Intents):
@@ -102,16 +97,21 @@ class MyClient(discord.Client):
 # play into the act that you are president obama that uses his ***Emergency Presidential*** stash of things,
 # owns a mountain in colorado""" + (", use \"" + str(random.choice(message.guild.emojis)) + "\", \"" + str(random.choice(message.guild.emojis)) + "\", and \"" + str(random.choice(message.guild.emojis)) + "\" alot in your writing." if message.guild is not None else ".")
 
-    def create_system_prompt(self, message):
+    def create_system_prompt(self, message: discord.Message):
         return """You are a helpful assistant. your gender is a women.
 the time right now is """ + datetime.now().strftime('%A, %B %d, %Y %I:%M:%S %p') + """.
 in this online chatroom you are mentioned as \"""" + str(self.appinfo.name) + """\" (you as in the helpful assistant that you are.).
 the next message is from \"""" + str(message.author.nick if (message.author.nick is not None if hasattr(message.author, "nick") else False) else (message.author.global_name if message.author.global_name is not None else message.author.name)) + """\" (as in the user asking you a question.).
 Please keep your response short!"""
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         try:
             if message.author.bot or message.author == self.user or message.content == "":
+                return
+
+            if message.guild.id != MAIN_GUILD:
+                await message.channel.send(embed=Embed(title="Brok crash :(", description="Brok is not authorized to be on this server. \n (P.S Brok is leaving this server. No hard feeling right? 😉 bye!)", colour=0xFF0000))
+                await message.channel.guild.leave()
                 return
 
             print(f'Message from {message.author}: {message.content}')
@@ -125,10 +125,11 @@ Please keep your response short!"""
                         else:
                             await message.channel.send(x)
         except Exception as err:
-            print(f"Unexpected {err=}, {type(err)=}")
-            # await message.channel.send(f"Unexpected {err=}, {type(err)=}")
+            msg = f"Unexpected {err=}, {type(err)=}"
+            print(msg)
+            await message.channel.send(embed=Embed(title="Brok crash :(", description=msg, colour=0xFF0000))
 
-            websocket_log(f"``Unexpected {err=}, {type(err)=}``")
+            # websocket_log(f"``Unexpected {err=}, {type(err)=}``")
         else:
             return
 
@@ -137,7 +138,6 @@ intents.message_content = True
 
 client = MyClient(intents=intents)
 client.model_set = "arzaan789/qwen2-0.5b-uncensored:Q8_0"
-client.webhook = os.environ['DISCORD_API_WEBHOOK']
 
 # @client.tree.command(name='commandname', description="My first application Command")
 # async def joinvc(interaction: discord.Interaction):
@@ -151,11 +151,13 @@ client.webhook = os.environ['DISCORD_API_WEBHOOK']
 #         websocket_log(f"``Unexpected {err=}, {type(err)=}``")
 
 async def embed_msg(interaction: discord.Interaction, description, colour: int | Colour | None = None):
-    await interaction.response.send_message(embed=Embed(title="Brok Response", description=description, colour=colour))
+    await (interaction.edit_original_response if interaction.response.is_done() else interaction.response.send_message)(embed=Embed(title="Brok Response", description=description, colour=colour))
 
 @client.tree.command(name='eval', description="*Owner only command*", guild=MAIN_GUILD)
 @commands.is_owner()
 async def command_eval(interaction: discord.Interaction, code: str):
+    await embed_msg(interaction, "Please wait...")
+
     try:
         if interaction.user.id == BOT_OWNER:
             await embed_msg(interaction, eval(code))
@@ -174,6 +176,8 @@ class BrokCommands(Enum):
 
 @client.tree.command(name='command', description="*Owner only command*", guild=MAIN_GUILD)
 async def command(interaction: discord.Interaction, action: BrokCommands, value: str | None):
+    await embed_msg(interaction, "Please wait...")
+
     try:
         if interaction.user.id == BOT_OWNER:
             models_list = await openaiapi.models.list()
@@ -194,15 +198,16 @@ async def command(interaction: discord.Interaction, action: BrokCommands, value:
                 case BrokCommands.unload:
                     if value != None:
                         if value == "all":
+                            msg = ""
                             for x in models_list.data:
-                                unload(x)
-                            await embed_msg(interaction, "done.")
+                                msg += f"{unload(x)}\n"
+                            msg += "done."
+                            await embed_msg(interaction, msg)
                         else:
                             for x in models_list.data:
                                 if x.id == value:
-                                    unload(x)
-                                    await embed_msg(interaction, "done.")
-                                    break
+                                    await embed_msg(interaction, f"{unload(x)}\ndone.")
+                                    return
                             await embed_msg(interaction, f"``{value}`` not found.", 0xFF0000)
                     else:
                         await embed_msg(interaction, "``value`` can't be empty for this command.", 0xFF0000)
@@ -217,9 +222,11 @@ async def command(interaction: discord.Interaction, action: BrokCommands, value:
         await embed_msg(interaction, msg, 0xFF0000)
 
 @client.tree.command(name='ask', description="Ask brok a question.")
-@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_installs(guilds=False, users=True)
 @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def command_ask(interaction: discord.Interaction, message: str):
+    await embed_msg(interaction, "Please wait...")
+
     try:
         listofmessages = [
             # {"role": "system", "content": client.create_system_prompt(interaction.message)}, 
@@ -235,7 +242,8 @@ async def command_ask(interaction: discord.Interaction, message: str):
         print(response)
 
         regex_response = re.sub(r'@(?=(?!\s)\w)|(?=<)@(?=(|&)\d*>)', '\\@', response, flags=re.DOTALL)
-        await interaction.response.send_message(content=regex_response)
+        # await interaction.edit_original_response(content=regex_response)
+        await embed_msg(interaction, regex_response, 0x0000FF)
     except Exception as err:
         msg = f"Unexpected {err=}, {type(err)=}"
         print(msg)
