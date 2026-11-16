@@ -109,7 +109,7 @@ Please keep your response short!"""
             if message.author.bot or message.author == self.user or message.content == "":
                 return
 
-            if message.guild.id != MAIN_GUILD:
+            if discord.Object(id=message.guild.id) != MAIN_GUILD:
                 await message.channel.send(embed=Embed(title="Brok crash :(", description="Brok is not authorized to be on this server. \n (P.S Brok is leaving this server. No hard feeling right? 😉 bye!)", colour=0xFF0000))
                 await message.channel.guild.leave()
                 return
