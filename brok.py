@@ -218,6 +218,7 @@ async def command(interaction: discord.Interaction, action: BrokCommands, value:
 
 @client.tree.command(name='ask', description="Ask brok a question.")
 @app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
 async def command_ask(interaction: discord.Interaction, message: str):
     try:
         listofmessages = [
